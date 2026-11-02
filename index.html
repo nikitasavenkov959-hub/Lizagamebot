@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Забег за подарками</title>
+    <style>
+        body { margin: 0; padding: 0; background: #ffe6f2; font-family: sans-serif; overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        #gameCanvas { background: #fff0f5; border-bottom: 5px solid #ff66b2; box-shadow: 0 10px 20px rgba(0,0,0,0.1); display: block; }
+        #score { position: absolute; top: 20px; left: 20px; font-size: 24px; font-weight: bold; color: #ff3399; }
+        #restartBtn { position: absolute; display: none; padding: 15px 30px; font-size: 20px; background: #ff66b2; color: white; border: none; border-radius: 25px; cursor: pointer; font-weight: bold; box-shadow: 0 4px 10px rgba(0,0,0,0.2); }
+    </style>
+</head>
+<body>
+    <div id="score">Подарков собрано: 0</div>
+    <button id="restartBtn" onclick="resetGame()">Попробовать еще раз 💖</button>
+    <canvas id="gameCanvas" width="800" height="400"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreEl = document.getElementById('score');
+        const restartBtn = document.getElementById('restartBtn');
+
+        let score = 0;
+        let gameOver = false;
+        let gameSpeed = 5;
+
+        // Главная героиня (Девочка)
+        const girl = {
+            x: 80, y: 300, width: 40, height: 70,
+            velocityY: 0, gravity: 0.6, jumpForce: -13, isJumping: false,
+            draw() {
+                // Черная куртка (тело)
+                ctx.fillStyle = '#1a1a1a';
+                ctx.fillRect(this.x, this.y + 20, this.width, 30);
+                // Голубые джинсы (ноги)
+                ctx.fillStyle = '#4da6ff';
+                ctx.fillRect(this.x + 5, this.y + 50, 12, 20);
+                ctx.fillRect(this.x + 23, this.y + 50, 12, 20);
+                // Розовые кроссовки
+                ctx.fillStyle = '#ff66cc';
+                ctx.fillRect(this.x + 2, this.y + 65, 15, 8);
+                ctx.fillRect(this.x + 23, this.y + 65, 15, 8);
+                // Лицо/кожа
+                ctx.fillStyle = '#ffd1b3';
+                ctx.fillRect(this.x + 10, this.y, 20, 20);
+                // Светло-белые волосы
+                ctx.fillStyle = '#f2f2f2';
+                ctx.fillRect(this.x + 5, this.y - 5, 30, 12); // Шапка волос
+                ctx.fillRect(this.x + 2, this.y, 7, 25);     // Пряди сбоку
+                ctx.fillRect(this.x + 31, this.y, 7, 25);
+            },
+            jump() {
+                if (!this.isJumping) {
+                    this.velocityY = this.jumpForce;
+                    this.isJumping = true;
+                }
+            },
+            update() {
+                this.velocityY += this.gravity;
+                this.y += this.velocityY;
+                if (this.y > 300) {
+                    this.y = 300;
+                    this.velocityY = 0;
+                    this.isJumping = false;
+                }
+            }
+        };
+
+        // Список подарков, которые парят над лавочками
+        const giftTypes = [
+            { name: '💄 Помада', color: '#ff0066' },
+            { name: '👟 Кроссовки', color: '#ff99ff' },
+            { name: '👜 Louis Vuitton', color: '#8b5a2b' },
+            { name: '🔮 Духи', color: '#9933ff' }
+        ];
+
+        let obstacles = [];
+        let nextObstacleTimer = 0;
+
+        function spawnObstacle() {
+            let gift = giftTypes[Math.floor(Math.random() * giftTypes.length)];
+            obstacles.push({
+                x: canvas.width,
+                y: 330, // лавочка на земле
+                width: 60,
+                height: 40,
+                giftX: canvas.width + 15,
+                giftY: 230, // подарок парит выше
+                giftWidth: 30,
+                giftHeight: 30,
+                giftText: gift.name,
+                giftColor: gift.color,
+                collected: false
+            });
+        }
+
+        function drawObstacles() {
+            obstacles.forEach(obs => {
+                // Рисуем лавочку
+                ctx.fillStyle = '#b35900'; // Коричневое дерево
+                ctx.fillRect(obs.x, obs.y, obs.width, 15);
+                ctx.fillStyle = '#595959'; // Ножки лавочки
+                ctx.fillRect(obs.x + 10, obs.y + 15, 8, 25);
+                ctx.fillRect(obs.x + obs.width - 18, obs.y + 15, 8, 25);
+
+                // Рисуем подарок над лавочкой (если еще не собран)
+                if (!obs.collected) {
+                    ctx.fillStyle = obs.giftColor;
+                    ctx.font = '20px sans-serif';
+                    ctx.fillText(obs.giftText, obs.x + 5, obs.giftY + 15);
+                }
+            });
+        }
+
+        function updateObstacles() {
+            obstacles.forEach(obs => {
+                obs.x -= gameSpeed;
+                
+                // Проверка сбора подарка (если девочка пролетает на уровне подарка)
+                if (!obs.collected && 
+                    girl.x < obs.x + obs.width &&
+                    girl.x + girl.width > obs.x &&
+                    girl.y < obs.giftY + obs.giftHeight &&
+                    girl.y + girl.height > obs.giftY) {
+                        obs.collected = true;
+                        score++;
+                        scoreEl.innerText = `Подарков собрано: ${score}`;
+                }
+
+                // Проверка столкновения с самой лавочкой (проигрыш)
+                if (girl.x < obs.x + obs.width &&
+                    girl.x + girl.width > obs.x &&
+                    girl.y < obs.y + obs.height &&
+                    girl.y + girl.height > obs.y) {
+                        gameOver = true;
+                        restartBtn.style.display = 'block';
+                }
+            });
+
+            // Удаляем улетевшие объекты
+            obstacles = obstacles.filter(obs => obs.x + obs.width > 0);
+        }
+
+        function resetGame() {
+            score = 0;
+            scoreEl.innerText = 'Подарков собрано: 0';
+            obstacles = [];
+            gameOver = false;
+            gameSpeed = 5;
+            girl.y = 300;
+            restartBtn.style.display = 'none';
+            animate();
+        }
+
+        function animate() {
+            if (gameOver) return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Земля
+            ctx.fillStyle = '#ffb3d9';
+            ctx.fillRect(0, 370, canvas.width, 30);
+
+            girl.update();
+            girl.draw();
+
+            nextObstacleTimer++;
+            if (nextObstacleTimer > 100 + Math.random() * 50) {
+                spawnObstacle();
+                nextObstacleTimer = 0;
+                if (gameSpeed < 12) gameSpeed += 0.2; // Постепенное ускорение
+            }
+
+            updateObstacles();
+            drawObstacles();
+
+            requestAnimationFrame(animate);
+        }
+
+        // Управление прыжком (Пробел, стрелка вверх или нажатие на экран телефона)
+        window.addEventListener('keydown', e => { if (e.code === 'Space' || e.code === 'ArrowUp') girl.jump(); });
+        canvas.addEventListener('touchstart', () => girl.jump());
+        canvas.addEventListener('mousedown', () => girl.jump());
+
+        animate();
+    </script>
+</body>
+</html>
